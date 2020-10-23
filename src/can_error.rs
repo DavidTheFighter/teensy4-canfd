@@ -1,5 +1,6 @@
 //! Errors relating to CAN FD
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CANFDError {
     BaudrateTooHigh,
     PrescalarTooHigh,
@@ -16,4 +17,12 @@ impl CANFDError {
             CANFDError::TransceiverDelayCompensationFail => "TDCOFF failed, check clock speed & baudrate",
         }
     }
+}
+
+pub enum RxTxError {
+    MailboxUnavailable,
+}
+
+impl RxTxError {
+    
 }

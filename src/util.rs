@@ -38,7 +38,7 @@ impl CANFD {
     
         // Reset RXIMRn registers
         for n in 0..64 {
-            self.get_rximr_n(n).write(0);
+            self.get_rximr_n(n).write(0x3FFF_FFFF);
         }
     
         ral::write_reg!(ral::can3, self.instance, RXMGMASK, 0);
@@ -58,8 +58,16 @@ impl CANFD {
         }
     }
 
+    pub fn get_region_1_message_buffers(&self) -> u32 {
+        self.config.region_1_config.max_buffers_per_region()
+    }
+
+    pub fn get_region_2_message_buffers(&self) -> u32 {
+        self.config.region_2_config.max_buffers_per_region()
+    }
+
     pub fn get_max_message_buffers(&self) -> u32 {
-        self.config.region_1_mb_size.max_buffers_per_region() + self.config.region_2_mb_size.max_buffers_per_region()
+        self.get_region_1_message_buffers() + self.get_region_2_message_buffers()
     }
 
     pub fn get_rximr_n(&mut self, n: u32) -> &ral::RWRegister<u32> {
@@ -200,5 +208,40 @@ impl CANFD {
             63 => &self.instance.CS63,
             _ => &self.instance.CS0,
         }
+    }
+}
+
+pub(crate) fn dlc_to_len(dlc: u32) -> u32 {
+    match dlc {
+        9 => 12,
+        10 => 16,
+        11 => 20,
+        12 => 24,
+        13 => 32,
+        14 => 48,
+        15 => 64,
+        _ => dlc % 9
+    }
+}
+
+pub(crate) fn len_to_dlc(len: u32) -> u32 {
+    if len <= 8 {
+        len
+    } else if len <= 12 {
+        9
+    } else if len <= 16 {
+        10
+    } else if len <= 20 {
+        11
+    } else if len <= 24 {
+        12
+    } else if len <= 32 {
+        13
+    } else if len <= 48 {
+        14
+    } else if len <= 64 {
+        15
+    } else {
+        8
     }
 }

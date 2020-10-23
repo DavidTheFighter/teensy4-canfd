@@ -6,7 +6,7 @@ use super::config;
 use super::can_error::CANFDError;
 
 impl CANFD {
-    pub fn init_clocks(&mut self, ccm: &ral::ccm::Instance) {
+    pub(crate) fn init_clocks(&mut self, ccm: &ral::ccm::Instance) {
         // Init clock source to 24MHz for now
         ral::modify_reg!(ral::ccm, ccm, CSCMR2, CAN_CLK_SEL: 0b01, CAN_CLK_PODF: 0b00);
 
@@ -17,7 +17,7 @@ impl CANFD {
         ral::modify_reg!(ral::ccm, ccm, CCGR7, CG4: 0b11, CG3: 0b11);
     }
 
-    pub fn init_pins(&mut self, iomuxc: &ral::iomuxc::Instance) {
+    pub(crate) fn init_pins(&mut self, iomuxc: &ral::iomuxc::Instance) {
         // Set transfer pin
         ral::modify_reg!(ral::iomuxc, iomuxc, SW_MUX_CTL_PAD_GPIO_EMC_36, SION: 0b1, MUX_MODE: 0b1001); 
         ral::modify_reg!(ral::iomuxc, iomuxc, SW_PAD_CTL_PAD_GPIO_EMC_36, |_| 0x10B0);
@@ -28,7 +28,7 @@ impl CANFD {
         ral::modify_reg!(ral::iomuxc, iomuxc, SW_PAD_CTL_PAD_GPIO_EMC_37, |_| 0x10B0);
     }
 
-    pub fn init(&mut self) -> Result<(), CANFDError> {
+    pub(crate) fn init(&mut self) -> Result<(), CANFDError> {
         if let Err(err) = self.init_classical() {
             return Err(err);
         }
@@ -137,8 +137,8 @@ impl CANFD {
         // Set:         Message buffer data size region 1 (MBDSR0), size of MBs in RAM region 1
         // Set:         Message buffer data size region 2 (MBDSR1), size of MBs in RAM region 2
         ral::modify_reg!(ral::can3, self.instance, FDCTRL, FDRATE: 0b1, TDCOFF: tdcoff, TDCEN: tdcen, 
-            MBDSR0: self.config.region_1_mb_size.to_mbdsr_n(), 
-            MBDSR1: self.config.region_2_mb_size.to_mbdsr_n());
+            MBDSR0: self.config.region_1_config.to_mbdsr_n(), 
+            MBDSR1: self.config.region_2_config.to_mbdsr_n());
 
         self.exit_freeze();
 

@@ -41,34 +41,82 @@ pub struct Config {
     pub clock_speed: Clock,
     pub timing_classical: TimingConfig,
     pub timing_fd: TimingConfig,
-    pub region_1_mb_size: MessageBufferSize,
-    pub region_2_mb_size: MessageBufferSize,
+    pub region_1_config: RegionConfig,
+    pub region_2_config: RegionConfig,
     pub transceiver_compensation: bool,
 }
-
-pub enum MessageBufferSize {
-    MB8,
-    MB16,
-    MB32,
-    MB64
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegionConfig {
+    MB8 { mailbox_configs: [MailboxConfig; 32] },
+    MB16 { mailbox_configs: [MailboxConfig; 21] },
+    MB32 { mailbox_configs: [MailboxConfig; 12] },
+    MB64 { mailbox_configs: [MailboxConfig; 7] },
 }
 
-impl MessageBufferSize {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MailboxConfig {
+    Unconfigured,
+    Rx { rx_config: RxMailboxConfig },
+    Tx,
+}
+
+impl Default for MailboxConfig {
+    fn default() -> Self {
+        MailboxConfig::Unconfigured
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RxMailboxConfig {
+    pub id: u32,            // The ID to match incoming messages with
+    pub id_mask: u32,       // A bitmask used to compared the incoming ID, 0 is don't care, 1 is match        
+    pub extended_id: bool,  // If the ID is 11 bits or 29 bits
+}
+
+impl RxMailboxConfig {
+    pub fn default() -> Self {
+        Self {
+            id: 0,
+            id_mask: 0x3FFF_FFFF,
+            extended_id: false,
+        }
+    }
+}
+
+impl RegionConfig {
     pub(crate) fn to_mbdsr_n(&self) -> u32 {
         match self {
-            MessageBufferSize::MB8 => 0b00,
-            MessageBufferSize::MB16 => 0b01,
-            MessageBufferSize::MB32 => 0b10,
-            MessageBufferSize::MB64 => 0b11,
+            RegionConfig::MB8{mailbox_configs} => 0b00,
+            RegionConfig::MB16{mailbox_configs} => 0b01,
+            RegionConfig::MB32{mailbox_configs} => 0b10,
+            RegionConfig::MB64{mailbox_configs} => 0b11,
         }
     }
 
     pub(crate) fn max_buffers_per_region(&self) -> u32 {
         match self {
-            MessageBufferSize::MB8 => 32,
-            MessageBufferSize::MB16 => 21,
-            MessageBufferSize::MB32 => 12,
-            MessageBufferSize::MB64 => 7,
+            RegionConfig::MB8{mailbox_configs} => 32,
+            RegionConfig::MB16{mailbox_configs} => 21,
+            RegionConfig::MB32{mailbox_configs} => 12,
+            RegionConfig::MB64{mailbox_configs} => 7,
+        }
+    }
+
+    pub(crate) fn mailbox_offset_for_idx(&self, mb_idx: u32) -> u32 {
+        match self {
+            RegionConfig::MB8{mailbox_configs} => mb_idx * 16,
+            RegionConfig::MB16{mailbox_configs} => mb_idx * 24,
+            RegionConfig::MB32{mailbox_configs} => mb_idx * 40,
+            RegionConfig::MB64{mailbox_configs} => mb_idx * 72,
+        }
+    }
+
+    pub(crate) fn size_bytes(&self) -> u32 {
+        match self {
+            RegionConfig::MB8{mailbox_configs} => 8,
+            RegionConfig::MB16{mailbox_configs} => 16,
+            RegionConfig::MB32{mailbox_configs} => 32,
+            RegionConfig::MB64{mailbox_configs} => 64,
         }
     }
 }
