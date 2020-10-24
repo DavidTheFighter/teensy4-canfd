@@ -1,20 +1,22 @@
 //! Kind of a misc for various CAN related things
 
-use imxrt_ral as ral;
 use super::CANFD;
+use imxrt_ral as ral;
 
 impl CANFD {
     pub fn enable(&mut self, state: bool) {
         ral::modify_reg!(ral::can3, self.instance, MCR, MDIS: if state { 0b0 } else { 0b1 });
 
-        while (ral::read_reg!(ral::can3, self.instance, MCR, LPMACK) == if state { 0b1 } else { 0b0 }) {}
+        while (ral::read_reg!(ral::can3, self.instance, MCR, LPMACK)
+            == if state { 0b1 } else { 0b0 })
+        {}
     }
 
     pub fn enter_freeze(&mut self) {
         ral::modify_reg!(ral::can3, self.instance, MCR, FRZ: 0b1, HALT: 0b1);
         while (ral::read_reg!(ral::can3, self.instance, MCR, FRZACK) != 0b1) {}
     }
-    
+
     pub fn exit_freeze(&mut self) {
         ral::modify_reg!(ral::can3, self.instance, MCR, HALT: 0b0);
         while (ral::read_reg!(ral::can3, self.instance, MCR, FRZACK) != 0b0) {}
@@ -22,36 +24,36 @@ impl CANFD {
 
     pub fn reset(&mut self) {
         ral::modify_reg!(ral::can3, self.instance, MCR, DOZE: 0b0);
-    
+
         // Wait for exit from low power mode
         while (ral::read_reg!(ral::can3, self.instance, MCR, LPMACK) == 0b1) {}
-    
+
         ral::modify_reg!(ral::can3, self.instance, MCR, SOFTRST: 0b1);
         while (ral::read_reg!(ral::can3, self.instance, MCR, SOFTRST) == 0b1) {}
-    
+
         // Make sure FREEZE mode is enabled
         while (ral::read_reg!(ral::can3, self.instance, MCR, FRZACK) == 0b0) {}
-    
+
         ral::modify_reg!(ral::can3, self.instance, MCR, WRNEN: 0b1, WAKSRC: 0b1, MAXMB: 63, SUPV: 0b0, LPRIOEN: 0b1);
         ral::write_reg!(ral::can3, self.instance, CTRL1, 0);
         ral::write_reg!(ral::can3, self.instance, CTRL2, RRS: 0b1, EACEN: 0b0, TASD: 0x16, ISOCANFDEN: 0b1);
-    
+
         // Reset RXIMRn registers
         for n in 0..64 {
             self.get_rximr_n(n).write(0x3FFF_FFFF);
         }
-    
+
         ral::write_reg!(ral::can3, self.instance, RXMGMASK, 0);
         ral::write_reg!(ral::can3, self.instance, RX14MASK, 0);
         ral::write_reg!(ral::can3, self.instance, RX15MASK, 0);
         ral::write_reg!(ral::can3, self.instance, RXFGMASK, 0);
-    
+
         ral::write_reg!(ral::can3, self.instance, IMASK1, 0);
         ral::write_reg!(ral::can3, self.instance, IMASK2, 0);
-    
+
         ral::write_reg!(ral::can3, self.instance, IFLAG1, 0);
         ral::write_reg!(ral::can3, self.instance, IFLAG2, 0);
-    
+
         // Clear all MB CS fields
         for n in 0..63 {
             self.get_cs_n(n).write(0);
@@ -139,7 +141,7 @@ impl CANFD {
             _ => &self.instance.RXIMR0,
         }
     }
-    
+
     fn get_cs_n(&mut self, n: u32) -> &ral::RWRegister<u32> {
         match n {
             0 => &self.instance.CS0,
@@ -220,7 +222,7 @@ pub(crate) fn dlc_to_len(dlc: u32) -> u32 {
         13 => 32,
         14 => 48,
         15 => 64,
-        _ => dlc % 9
+        _ => dlc % 9,
     }
 }
 

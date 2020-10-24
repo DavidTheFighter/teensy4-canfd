@@ -8,37 +8,47 @@ pub const CS_CODE_RX_INACTIVE: u32 = 0x0;
 pub const CS_CODE_RX_FULL: u32 = 0x2;
 pub const CS_CODE_RX_EMPTY: u32 = 0x4;
 pub const CS_CODE_RX_OVERRUN: u32 = 0x6;
-pub const CS_CODE_RX_BUSY: u32 = 0x8;
-pub const CS_CODE_RX_RANSWER: u32 = 0xA;
-pub const CS_CODE_RX_NOTUSED: u32 = 0xF;
+pub const _CS_CODE_RX_BUSY: u32 = 0x8;
+pub const _CS_CODE_RX_RANSWER: u32 = 0xA;
+pub const _CS_CODE_RX_NOTUSED: u32 = 0xF;
 
 pub const CS_CODE_TX_INACTIVE: u32 = 0x8;
-pub const CS_CODE_TX_ABORT: u32 = 0x9;
+pub const _CS_CODE_TX_ABORT: u32 = 0x9;
 pub const CS_CODE_TX_DATA_OR_REMOTE: u32 = 0xC;
-pub const CS_CODE_TX_ANSWER: u32 = 0xE;
-pub const CS_CODE_TX_NOT_USED: u32 = 0xF;
+pub const _CS_CODE_TX_ANSWER: u32 = 0xE;
+pub const _CS_CODE_TX_NOT_USED: u32 = 0xF;
 
 pub fn read_cs_reg(mb_data_offset: u32) -> CSRegisterBitfield {
-    unsafe { CSRegisterBitfield { 
-        val: ptr::read_volatile((MESSAGE_BUFFER_BASE_ADDR + mb_data_offset) as *mut u32) 
-    }}
+    unsafe {
+        CSRegisterBitfield {
+            val: ptr::read_volatile((MESSAGE_BUFFER_BASE_ADDR + mb_data_offset) as *mut u32),
+        }
+    }
 }
 
 pub fn write_cs_reg(mb_data_offset: u32, cs_reg: CSRegisterBitfield) {
     unsafe {
-        ptr::write_volatile((MESSAGE_BUFFER_BASE_ADDR + mb_data_offset) as *mut u32, cs_reg.val);
+        ptr::write_volatile(
+            (MESSAGE_BUFFER_BASE_ADDR + mb_data_offset) as *mut u32,
+            cs_reg.val,
+        );
     }
 }
 
 pub fn read_id_reg(mb_data_offset: u32) -> IDRegisterBitfield {
-    unsafe { IDRegisterBitfield { 
-        val: ptr::read_volatile((MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 4) as *mut u32) 
-    }}
+    unsafe {
+        IDRegisterBitfield {
+            val: ptr::read_volatile((MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 4) as *mut u32),
+        }
+    }
 }
 
 pub fn write_id_reg(mb_data_offset: u32, id_reg: IDRegisterBitfield) {
     unsafe {
-        ptr::write_volatile((MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 4) as *mut u32, id_reg.val);
+        ptr::write_volatile(
+            (MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 4) as *mut u32,
+            id_reg.val,
+        );
     }
 }
 
@@ -51,12 +61,17 @@ pub fn clear_message_buffer_data(mb_data_offset: u32, mb_data_size: u32) {
 
 pub fn write_message_buffer(mb_data_offset: u32, buffer: [u32; 16], buffer_len: u32) {
     unsafe {
-        let addr = (MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 8) as *mut u32;
-        
+        let addr = MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 8;
+
         // TODO ptr::copy_nonoverlapping?
 
-        for i in 0..((buffer_len >> 2) as usize).min(16) {  // (x >> 2) is fancy for (x / 4)
-            ptr::write_volatile(addr, buffer[i]);
+        for (offset, buffer_elem) in buffer
+            .iter()
+            .take(((buffer_len >> 2) as usize).min(16))
+            .enumerate()
+        {
+            // (x >> 2) is fancy for (x / 4)
+            ptr::write_volatile((addr + (offset as u32) * 4) as *mut u32, *buffer_elem);
         }
     }
 }
@@ -68,11 +83,12 @@ pub fn read_message_buffer(mb_data_offset: u32, read_len: u32) -> [u32; 16] {
 
         // TODO ptr::copy_nonoverlapping?
 
-        for i in 0..(read_len >> 2).min(16) {  // (x >> 2) is fancy for (x / 4)
+        for i in 0..(read_len >> 2).min(16) {
+            // (x >> 2) is fancy for (x / 4)
             buf[i as usize] = ptr::read_volatile((base_addr + i * 4) as *mut u32);
         }
 
-        return buf;
+        buf
     }
 }
 
@@ -83,9 +99,9 @@ pub enum CSField {
     CODE,
     SSR,
     IDE,
-    RTR,
+    _RTR,
     DLC,
-    TIMESTAMP
+    TIMESTAMP,
 }
 
 impl CSField {
@@ -97,7 +113,7 @@ impl CSField {
             CSField::CODE => 0xF00_0000,
             CSField::SSR => 0x40_0000,
             CSField::IDE => 0x20_0000,
-            CSField::RTR => 0x10_0000,
+            CSField::_RTR => 0x10_0000,
             CSField::DLC => 0xF_0000,
             CSField::TIMESTAMP => 0xFFFF,
         }
@@ -111,7 +127,7 @@ impl CSField {
             CSField::CODE => 24,
             CSField::SSR => 22,
             CSField::IDE => 21,
-            CSField::RTR => 20,
+            CSField::_RTR => 20,
             CSField::DLC => 16,
             CSField::TIMESTAMP => 0,
         }
@@ -124,9 +140,7 @@ pub struct CSRegisterBitfield {
 
 impl CSRegisterBitfield {
     pub fn new() -> Self {
-        Self {
-            val: 0,
-        }
+        Self { val: 0 }
     }
 
     pub fn write_field(&mut self, field: CSField, value: u32) {
@@ -170,9 +184,7 @@ pub struct IDRegisterBitfield {
 
 impl IDRegisterBitfield {
     pub fn new() -> Self {
-        Self {
-            val: 0,
-        }
+        Self { val: 0 }
     }
 
     pub fn write_field(&mut self, field: IDField, value: u32) {
