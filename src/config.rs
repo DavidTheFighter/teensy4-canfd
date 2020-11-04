@@ -1,7 +1,7 @@
 //! All config related things
 
-pub const MAX_BAUDRATE_CLASSICAL: u32 = 1_000_000;
-pub const MAX_BAUDRATE_FD: u32 = 8_000_000;
+pub const MAX_BAUDRATE_CLASSICAL: u32 = 1_000_000; // The maximum baudrate for classical CAN
+pub const MAX_BAUDRATE_FD: u32 = 8_000_000; // The maximum baudrate for CANFD frames
 
 pub enum Clock {
     Clock8Mhz,
@@ -27,14 +27,40 @@ impl Clock {
             Clock::Clock80Mhz => 80_000_000,
         }
     }
+
+    pub(crate) fn to_clk_sel(&self) -> u32 {
+        match self {
+            Clock::Clock8Mhz => 2,
+            Clock::Clock16Mhz => 2,
+            Clock::Clock20Mhz => 2,
+            Clock::Clock24Mhz => 1,
+            Clock::Clock30Mhz => 0,
+            Clock::Clock40Mhz => 2,
+            Clock::Clock60Mhz => 0,
+            Clock::Clock80Mhz => 2,
+        }
+    }
+
+    pub(crate) fn to_clk_podf(&self) -> u32 {
+        match self {
+            Clock::Clock8Mhz => 9,
+            Clock::Clock16Mhz => 4,
+            Clock::Clock20Mhz => 3,
+            Clock::Clock24Mhz => 0,
+            Clock::Clock30Mhz => 1,
+            Clock::Clock40Mhz => 1,
+            Clock::Clock60Mhz => 0,
+            Clock::Clock80Mhz => 0,
+        }
+    }
 }
 
 pub struct TimingConfig {
-    pub baudrate: u32,
-    pub jump_width: u8,
+    pub prescalar_division: u32,
+    pub prop_seg: u8,
     pub phase_seg_1: u8,
     pub phase_seg_2: u8,
-    pub prop_seg: u8,
+    pub jump_width: u8,
 }
 
 pub struct Config {
@@ -43,7 +69,7 @@ pub struct Config {
     pub timing_fd: TimingConfig,
     pub region_1_config: RegionConfig,
     pub region_2_config: RegionConfig,
-    pub transceiver_compensation: bool,
+    pub transceiver_compensation: Option<u8>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegionConfig {
@@ -72,6 +98,11 @@ impl Default for MailboxConfig {
     fn default() -> Self {
         MailboxConfig::Unconfigured
     }
+}
+
+pub enum Id {
+    Standard(u32),
+    Extended(u32),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

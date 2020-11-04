@@ -24,12 +24,10 @@ pub struct RxFDFrame {
     pub timestamp: u16,
     pub error_state: bool,
 }
-use log::info;
 
 impl CANFD {
     pub fn transfer_blocking(&mut self, frame: TxFDFrame) -> Result<(), RxTxError> {
         // TODO Better logic for selecting mailbox (smallest size, etc)
-        info!("TRANSFER");
 
         loop {
             for (index, mailbox) in self.mailbox_configs.iter().enumerate() {
@@ -48,6 +46,26 @@ impl CANFD {
                 }
             }
         }
+    }
+
+    pub fn transfer_nb(&mut self, frame: TxFDFrame) -> Result<(), RxTxError> {
+        for (index, mailbox) in self.mailbox_configs.iter().enumerate() {
+            if *mailbox != MailboxConfig::Tx {
+                continue;
+            }
+
+            if let Ok(()) = self.transfer(index as u32, &frame) {
+                // Wait for IFLAG to set to indicate a transmission
+                while self.read_iflag_bit(index as u32) {}
+
+                // Reset the IFLAG bit to indicate we read the message
+                self.write_iflag_bit(index as u32);
+
+                return Ok(());
+            }
+        }
+
+        return Err(RxTxError::MailboxUnavailable);
     }
 
     fn transfer(&self, mb_index: u32, frame: &TxFDFrame) -> Result<(), RxTxError> {
@@ -150,10 +168,7 @@ impl CANFD {
             0
         };
 
-        info!("2-0");
-
         self.enter_freeze();
-        info!("2-1");
 
         match region_config {
             RegionConfig::MB8 { mailbox_configs } => {
@@ -177,10 +192,8 @@ impl CANFD {
                 }
             }
         }
-        info!("2-2");
 
         self.exit_freeze();
-        info!("2-3");
     }
 
     fn configure_mailbox(&mut self, mb_index: u32, config: &MailboxConfig) {
@@ -195,6 +208,10 @@ impl CANFD {
 
     fn configure_tx_mailbox(&mut self, mb_index: u32) {
         let mb_data_offset = self.get_mailbox_data_offset(mb_index);
+
+        log::info!("TX | Index: {}, Offset: {}, Size: {}, Max bound: {}", mb_index, mb_data_offset,
+        
+        self.get_mailbox_size(mb_index), mb_data_offset + self.get_mailbox_size(mb_index));
 
         self.write_iflag_bit(mb_index);
         self.set_imask_bit(mb_index, false);
@@ -213,15 +230,20 @@ impl CANFD {
     fn configure_rx_mailbox(&mut self, mb_index: u32, config: &RxMailboxConfig) {
         let mb_data_offset = self.get_mailbox_data_offset(mb_index);
 
+        log::info!("RX | Index: {}, Offset: {}, Size: {}, Max bound: {}", mb_index, mb_data_offset,
+        self.get_mailbox_size(mb_index), mb_data_offset + self.get_mailbox_size(mb_index));
+
         self.write_iflag_bit(mb_index);
         self.set_imask_bit(mb_index, true);
 
         // "Inactive" and clean the message buffer
         let mut cs_reg = CSRegisterBitfield::new();
         cs_reg.write_field(CSField::CODE, CS_CODE_RX_INACTIVE);
+        
         write_cs_reg(mb_data_offset, cs_reg);
-        clear_message_buffer_data(mb_data_offset, self.get_mailbox_size(mb_index));
 
+        clear_message_buffer_data(mb_data_offset, self.get_mailbox_size(mb_index));
+        
         // Configure the message buffer
         let mut id_reg = IDRegisterBitfield::new();
         id_reg.write_field(

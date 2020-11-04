@@ -2,35 +2,15 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CANFDError {
-    BaudrateTooHigh,
-    PrescalarTooHigh,
-    TransceiverDelayCompensationTooHigh,
-    TransceiverDelayCompensationFail,
-    Unknown,
-}
-
-impl CANFDError {
-    pub fn get_error_message(&self) -> &'static str {
-        match self {
-            CANFDError::BaudrateTooHigh => "Baudrate is too high, check the baudrate limits",
-            CANFDError::PrescalarTooHigh => {
-                "Prescalar divison is too high, checking your timing config"
-            }
-            CANFDError::TransceiverDelayCompensationTooHigh => {
-                "TDCOFF is too high, check clock speed & baudrate"
-            }
-            CANFDError::TransceiverDelayCompensationFail => {
-                "TDCOFF failed, check clock speed & baudrate"
-            }
-            CANFDError::Unknown => "Unknown error",
-        }
-    }
+    BaudrateTooHigh,                     // Make sure baudrate is within limits
+    PrescalarTooHigh,                    // Check timing config
+    TransceiverDelayCompensationTooHigh, // Check clock speed & baudrate ratio
+    TransceiverDelayCompensationFail,    // Check clock speed & baudrate ratio
+    Unknown,                             // Placeholder, *shouldn't* ever get it
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RxTxError {
-    MailboxUnavailable,
-    Unknown,
+    MailboxUnavailable, // Could not use this mailbox, it was unavailable for the operation
+    Unknown,            // Placeholder, *shouldn't* ever get this
 }
-
-impl RxTxError {}

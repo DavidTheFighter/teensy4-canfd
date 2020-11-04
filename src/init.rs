@@ -4,12 +4,12 @@ use super::can_error::CANFDError;
 use super::config;
 use super::CANFD;
 use imxrt_ral as ral;
-use log::info;
+
 impl CANFD {
     pub(crate) fn init_clocks(&mut self) {
         unsafe {
             // Init clock source to 24MHz for now
-            ral::modify_reg!(ral::ccm, CCM, CSCMR2, CAN_CLK_SEL: 0b01, CAN_CLK_PODF: 0b00);
+            ral::modify_reg!(ral::ccm, CCM, CSCMR2, CAN_CLK_SEL: self.config.clock_speed.to_clk_sel(), CAN_CLK_PODF: self.config.clock_speed.to_clk_podf());
 
             // Due to a hardware bug, the LPUART clock must be on for CanFD to work
             ral::modify_reg!(ral::ccm, CCM, CCGR0, CG6: 0b11);
@@ -66,41 +66,28 @@ impl CANFD {
 
         let timing = &self.config.timing_classical;
 
-        if timing.baudrate > config::MAX_BAUDRATE_CLASSICAL {
-            return Err(CANFDError::BaudrateTooHigh);
-        }
-
-        let quantum = 4 + timing.phase_seg_1 + timing.phase_seg_2 + timing.prop_seg;
-
-        let mut pre_div = timing.baudrate * (quantum as u32);
-
-        if pre_div > self.config.clock_speed.to_hz() {
-            return Err(CANFDError::PrescalarTooHigh);
-        }
-
-        pre_div = ((self.config.clock_speed.to_hz() / pre_div.max(1)) - 1).min(0xFF);
-
-        let rjw = timing.jump_width as u32;
-        let seg1 = timing.phase_seg_1 as u32;
-        let seg2 = timing.phase_seg_2 as u32;
-        let prop_seg = timing.prop_seg as u32;
+        let div = (timing.prescalar_division.max(1).min(1023) - 1) as u32;
+        let prop_seg = (timing.prop_seg.max(1).min(63) - 1) as u32;
+        let seg1 = (timing.phase_seg_1.max(1).min(31) - 1) as u32;
+        let seg2 = (timing.phase_seg_2.max(1).min(31) - 1) as u32;
+        let rjw = (timing.jump_width.max(1).min(31) - 1) as u32;
 
         self.enter_freeze();
 
         // Write timing config to register
-        /*
         ral::modify_reg!(
             ral::can3,
             self.instance,
             CBT,
-            EPRESDIV: pre_div,
-            ERJW: rjw,
+            EPRESDIV: div,
+            EPROPSEG: prop_seg,
             EPSEG1: seg1,
             EPSEG2: seg2,
-            EPROPSEG: prop_seg
+            ERJW: rjw,
+            BTF: 0b1
         );
-        */
-        ral::write_reg!(ral::can3, &self.instance, CBT, 0x800624A6);
+
+        //ral::write_reg!(ral::can3, &self.instance, CBT, 0x800624A6); // For the C++ FlexCAN library
 
         self.exit_freeze();
 
@@ -112,53 +99,31 @@ impl CANFD {
 
         let timing = &self.config.timing_fd;
 
-        if timing.baudrate > config::MAX_BAUDRATE_FD {
-            return Err(CANFDError::BaudrateTooHigh);
-        }
+        let fdiv = timing.prescalar_division.max(1).min(1023) - 1;
+        let fprop_seg = (timing.prop_seg.max(1).min(63) - 1) as u32;
+        let fseg1 = (timing.phase_seg_1.max(1).min(31) - 1) as u32;
+        let fseg2 = (timing.phase_seg_2.max(1).min(31) - 1) as u32;
+        let frjw = (timing.jump_width.max(1).min(31) - 1) as u32;
 
-        let quantum = 4 + timing.phase_seg_1 + timing.phase_seg_2 + timing.prop_seg;
-
-        let mut fpre_div = timing.baudrate * (quantum as u32);
-
-        if fpre_div > self.config.clock_speed.to_hz() {
-            return Err(CANFDError::PrescalarTooHigh);
-        }
-
-        fpre_div = ((self.config.clock_speed.to_hz() / fpre_div.max(1)) - 1).min(0xFF);
-
-        let frjw = timing.jump_width as u32;
-        let fseg1 = timing.phase_seg_1 as u32;
-        let fseg2 = timing.phase_seg_2 as u32;
-        let fprop_seg = timing.prop_seg as u32;
-        let tdcen = if self.config.transceiver_compensation {
-            0b1
-        } else {
-            0b0
-        };
-        let tdcoff = (self.config.clock_speed.to_hz() / (2 * timing.baudrate)).max(1);
-
-        info!("TDCOFF: {}", tdcoff);
-
-        if self.config.transceiver_compensation && tdcoff > 0b1111 {
-            return Err(CANFDError::TransceiverDelayCompensationTooHigh);
-        }
+        let tdcen: u32 = if let None = self.config.transceiver_compensation { 0b0 } else { 0b1 };
+        let tdcoff: u32 = if let Some(tdcoff) = self.config.transceiver_compensation { tdcoff.max(1).min(31) as u32 } else { 1 };
 
         self.enter_freeze();
 
         // Write timing config to register
-        /*
+
         ral::modify_reg!(
             ral::can3,
             self.instance,
             FDCBT,
-            FPRESDIV: fpre_div,
-            FRJW: frjw,
+            FPRESDIV: fdiv,
+            FPROPSEG: fprop_seg,
             FPSEG1: fseg1,
             FPSEG2: fseg2,
-            FPROPSEG: fprop_seg
+            FRJW: frjw
         );
-        */
-        ral::write_reg!(ral::can3, &self.instance, FDCBT, 0x31423);
+
+        //ral::write_reg!(ral::can3, &self.instance, FDCBT, 0x31423); // For the C++ FlexCAN library
 
         // Enable: CAN FD
         ral::modify_reg!(ral::can3, self.instance, MCR, FDEN: 0b1);
@@ -168,7 +133,7 @@ impl CANFD {
         // Set:         Transceiver delay compensation enable (TDCEN)
         // Set:         Message buffer data size region 1 (MBDSR0), size of MBs in RAM region 1
         // Set:         Message buffer data size region 2 (MBDSR1), size of MBs in RAM region 2
-        ral::modify_reg!(ral::can3, self.instance, FDCTRL, FDRATE: 0b1, TDCOFF: 0x3, TDCEN: 0b1,
+        ral::modify_reg!(ral::can3, self.instance, FDCTRL, FDRATE: 0b1, TDCOFF: tdcoff, TDCEN: tdcen,
             MBDSR0: self.config.region_1_config.to_mbdsr_n(),
             MBDSR1: self.config.region_2_config.to_mbdsr_n());
 

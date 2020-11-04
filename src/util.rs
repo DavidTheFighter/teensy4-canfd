@@ -4,6 +4,8 @@ use super::CANFD;
 use imxrt_ral as ral;
 
 impl CANFD {
+    
+
     pub fn enable(&mut self, state: bool) {
         ral::modify_reg!(ral::can3, self.instance, MCR, MDIS: if state { 0b0 } else { 0b1 });
 

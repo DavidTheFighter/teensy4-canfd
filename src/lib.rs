@@ -15,6 +15,7 @@ use cortex_m::interrupt::CriticalSection;
 use imxrt_ral as ral;
 use mailbox::{RxFDFrame, TxFDFrame};
 use teensy4_bsp::interrupt::CAN3;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 struct CANFDCS(UnsafeCell<Option<CANFD>>);
 
@@ -29,30 +30,11 @@ impl CANFDCS {
             }
         }
     }
-
-    pub(crate) fn exec_mut<F>(&self, _cs: &CriticalSection, f: F)
-    where
-        F: FnOnce(&mut CANFD),
-    {
-        unsafe {
-            if let Some(canfd) = &mut (*self.0.get()) {
-                f(canfd);
-            }
-        }
-    }
-
-    fn set(&self, value: Option<CANFD>) {
-        unsafe {
-            *self.0.get() = value;
-        }
-    }
-
-    // TODO fn is_none(..)
 }
 
 unsafe impl Sync for CANFDCS {}
 
-static mut TAKEN: bool = false;
+static TAKEN: AtomicBool = AtomicBool::new(false);
 pub(crate) static CANFD_INSTANCE: CANFDCS = CANFDCS(UnsafeCell::new(None));
 
 pub(crate) struct CANFD {
@@ -69,7 +51,7 @@ pub struct CAN3FD {
 impl CAN3FD {
     pub fn transfer_blocking(
         &mut self,
-        cs: &CriticalSection,
+        _cs: &CriticalSection,
         frame: TxFDFrame,
     ) -> Result<(), RxTxError> {
         let mut result: Result<(), RxTxError> = Err(RxTxError::Unknown);
@@ -83,7 +65,23 @@ impl CAN3FD {
         result
     }
 
-    pub fn set_rx_callback(&mut self, cs: &CriticalSection, f: fn(&CriticalSection, RxFDFrame)) {
+    pub fn transfer_nb(
+        &mut self,
+        _cs: &CriticalSection,
+        frame: TxFDFrame,
+    ) -> Result<(), RxTxError> {
+        let mut result: Result<(), RxTxError> = Err(RxTxError::Unknown);
+
+        unsafe {
+            if let Some(canfd) = &mut (*CANFD_INSTANCE.0.get()) {
+                result = canfd.transfer_nb(frame);
+            }
+        }
+
+        result
+    }
+
+    pub fn set_rx_callback(&mut self, _cs: &CriticalSection, f: fn(&CriticalSection, RxFDFrame)) {
         unsafe {
             if let Some(canfd) = &mut (*CANFD_INSTANCE.0.get()) {
                 canfd.rx_callback = Some(f);
@@ -94,21 +92,20 @@ impl CAN3FD {
 
 pub struct CANFDBuilder {}
 
-use log::info;
-
 impl CANFDBuilder {
     pub fn take() -> Option<Self> {
-        unsafe {
-            if TAKEN {
-                None
-            } else {
-                TAKEN = true;
+        let mut result: Option<Self> = None;
 
-                let instance = Self {};
+        cortex_m_interrupt::free(|_cs| {
+            if !TAKEN.load(Ordering::Relaxed) {
+                TAKEN.store(true, Ordering::Relaxed);
 
-                Some(instance)
+                result = Some(Self {
+                });
             }
-        }
+        });
+
+        result
     }
 
     pub fn build(self, can_config: config::Config) -> Result<CAN3FD, can_error::CANFDError> {
@@ -119,32 +116,24 @@ impl CANFDBuilder {
             rx_callback: None,
         };
 
-        info!("0");
-
         canfd.init_clocks();
-        info!("1");
         canfd.init_pins();
-        info!("2");
 
         if let Err(error) = canfd.init() {
             return Err(error);
         }
 
-        info!("3");
-
         canfd.configure_region_mailboxes(1, canfd.config.region_1_config);
-        info!("4");
-
         canfd.configure_region_mailboxes(2, canfd.config.region_2_config);
-        info!("5");
 
-        CANFD_INSTANCE.set(Some(canfd));
-
-        // Enable interrupts for CAN3
         unsafe {
+            cortex_m_interrupt::free(|_cs| {
+                *CANFD_INSTANCE.0.get() = Some(canfd);
+            });
+
+            // Enable interrupts for CAN3
             cortex_m::peripheral::NVIC::unmask(CAN3);
         }
-        info!("6");
 
         Ok(CAN3FD { _0: () })
     }

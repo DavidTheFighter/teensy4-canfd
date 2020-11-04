@@ -54,8 +54,11 @@ pub fn write_id_reg(mb_data_offset: u32, id_reg: IDRegisterBitfield) {
 
 pub fn clear_message_buffer_data(mb_data_offset: u32, mb_data_size: u32) {
     unsafe {
-        let addr = (MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 8) as *mut u32;
-        ptr::write_bytes(addr, 0, mb_data_size as usize);
+        let base_addr = MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 8;
+
+        for i in (0..mb_data_size).step_by(4) {
+            ptr::write_volatile((base_addr + i) as *mut u32, 0u32);
+        }
     }
 }
 

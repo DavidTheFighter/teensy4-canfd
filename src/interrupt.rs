@@ -16,6 +16,8 @@ unsafe fn CAN3() {
 
 impl CANFD {
     fn handle_interrupt(&self, cs: &cortex_m_interrupt::CriticalSection) {
+        // TODO Make sure this is OPTIMIZED
+
         let iflag = self.read_iflag();
         let imask = self.read_imask();
         let num_mbs = self.get_max_message_buffers();
