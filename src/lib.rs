@@ -1,3 +1,7 @@
+//! A driver for the Teensy 4 CAN FD bus, written entirely in Rust
+//! Author: David Allen (hbddallen@gmail.com)
+//!
+
 #![no_std]
 
 pub mod can_error;
@@ -10,12 +14,12 @@ pub(crate) mod util;
 
 use can_error::RxTxError;
 use core::cell::UnsafeCell;
+use core::sync::atomic::{AtomicBool, Ordering};
 use cortex_m::interrupt as cortex_m_interrupt;
 use cortex_m::interrupt::CriticalSection;
 use imxrt_ral as ral;
 use mailbox::{RxFDFrame, TxFDFrame};
 use teensy4_bsp::interrupt::CAN3;
-use core::sync::atomic::{AtomicBool, Ordering};
 
 struct CANFDCS(UnsafeCell<Option<CANFD>>);
 
@@ -100,8 +104,7 @@ impl CANFDBuilder {
             if !TAKEN.load(Ordering::Relaxed) {
                 TAKEN.store(true, Ordering::Relaxed);
 
-                result = Some(Self {
-                });
+                result = Some(Self {});
             }
         });
 
@@ -123,8 +126,7 @@ impl CANFDBuilder {
             return Err(error);
         }
 
-        canfd.configure_region_mailboxes(1, canfd.config.region_1_config);
-        canfd.configure_region_mailboxes(2, canfd.config.region_2_config);
+        canfd.configure_regions();
 
         unsafe {
             cortex_m_interrupt::free(|_cs| {

@@ -1,24 +1,24 @@
-//! Mailboxes
+//! Code related to mailboxes and sending and receiving data
+//!
+//! Author: David Allen (hbddallen@gmail.com)
 
 use crate::util::{dlc_to_len, len_to_dlc};
 use imxrt_ral as ral;
 
 use crate::can_error::RxTxError;
-use crate::config::{MailboxConfig, RegionConfig, RxMailboxConfig};
+use crate::config::{Id, MailboxConfig, RegionConfig, RxMailboxConfig};
 use crate::message_buffer::*;
 use crate::CANFD;
 
 pub struct TxFDFrame {
-    pub id: u32,
-    pub extended_id: bool,
+    pub id: Id,
     pub buffer_len: u32,
     pub buffer: [u32; 16],
     pub priority: Option<u8>,
 }
 
 pub struct RxFDFrame {
-    pub id: u32,
-    pub extended_id: bool,
+    pub id: Id,
     pub buffer_len: u32,
     pub buffer: [u32; 16],
     pub timestamp: u16,
@@ -31,10 +31,24 @@ impl CANFD {
 
         loop {
             for (index, mailbox) in self.mailbox_configs.iter().enumerate() {
-                if *mailbox != MailboxConfig::Tx {
-                    continue;
-                }
+                if let MailboxConfig::Tx = mailbox {
+                    if let Ok(()) = self.transfer(index as u32, &frame) {
+                        // Wait for IFLAG to set to indicate a transmission
+                        while self.read_iflag_bit(index as u32) {}
 
+                        // Reset the IFLAG bit to indicate we read the message
+                        self.write_iflag_bit(index as u32);
+
+                        return Ok(());
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn transfer_nb(&mut self, frame: TxFDFrame) -> Result<(), RxTxError> {
+        for (index, mailbox) in self.mailbox_configs.iter().enumerate() {
+            if let MailboxConfig::Tx = mailbox {
                 if let Ok(()) = self.transfer(index as u32, &frame) {
                     // Wait for IFLAG to set to indicate a transmission
                     while self.read_iflag_bit(index as u32) {}
@@ -46,26 +60,8 @@ impl CANFD {
                 }
             }
         }
-    }
 
-    pub fn transfer_nb(&mut self, frame: TxFDFrame) -> Result<(), RxTxError> {
-        for (index, mailbox) in self.mailbox_configs.iter().enumerate() {
-            if *mailbox != MailboxConfig::Tx {
-                continue;
-            }
-
-            if let Ok(()) = self.transfer(index as u32, &frame) {
-                // Wait for IFLAG to set to indicate a transmission
-                while self.read_iflag_bit(index as u32) {}
-
-                // Reset the IFLAG bit to indicate we read the message
-                self.write_iflag_bit(index as u32);
-
-                return Ok(());
-            }
-        }
-
-        return Err(RxTxError::MailboxUnavailable);
+        Err(RxTxError::MailboxUnavailable)
     }
 
     fn transfer(&self, mb_index: u32, frame: &TxFDFrame) -> Result<(), RxTxError> {
@@ -85,14 +81,11 @@ impl CANFD {
 
         // Write the ID register
         let mut id_reg = IDRegisterBitfield::new();
-        id_reg.write_field(
-            if frame.extended_id {
-                IDField::ID_EXT
-            } else {
-                IDField::ID_STD
-            },
-            frame.id,
-        );
+
+        match frame.id {
+            Id::Standard(id) => id_reg.write_field(IDField::ID_STD, id),
+            Id::Extended(id) => id_reg.write_field(IDField::ID_EXT, id),
+        }
 
         if let Some(priority) = frame.priority {
             id_reg.write_field(IDField::PRIO, priority as u32);
@@ -105,15 +98,24 @@ impl CANFD {
         // Configure CS register for transmitting
         let mut cs_reg = CSRegisterBitfield::new();
         cs_reg.write_field(CSField::CODE, CS_CODE_TX_DATA_OR_REMOTE);
-        cs_reg.write_field(CSField::SSR, if frame.extended_id { 0b1 } else { 0b0 });
-        cs_reg.write_field(CSField::IDE, if frame.extended_id { 0b1 } else { 0b0 });
         cs_reg.write_field(CSField::EDL, 0b1); // CAN FD Frame
         cs_reg.write_field(CSField::BRS, 0b1); // Bitrate switch
         cs_reg.write_field(CSField::DLC, len_to_dlc(frame.buffer_len));
 
+        match frame.id {
+            Id::Standard(_) => {
+                cs_reg.write_field(CSField::SSR, 0b0);
+                cs_reg.write_field(CSField::IDE, 0b0);
+            }
+            Id::Extended(_) => {
+                cs_reg.write_field(CSField::SSR, 0b1);
+                cs_reg.write_field(CSField::IDE, 0b1);
+            }
+        }
+
         write_cs_reg(mb_data_offset, cs_reg);
 
-        return Ok(());
+        Ok(())
     }
 
     pub(crate) fn receive(&self, mb_index: u32) -> Option<RxFDFrame> {
@@ -134,11 +136,10 @@ impl CANFD {
 
         let frame = RxFDFrame {
             id: if extended {
-                id_reg.read_field(IDField::ID_EXT)
+                Id::Extended(id_reg.read_field(IDField::ID_EXT))
             } else {
-                id_reg.read_field(IDField::ID_STD)
+                Id::Standard(id_reg.read_field(IDField::ID_STD))
             },
-            extended_id: extended,
             buffer_len,
             buffer: read_message_buffer(mb_data_offset, buffer_len),
             timestamp: cs_reg.read_field(CSField::TIMESTAMP) as u16,
@@ -154,22 +155,19 @@ impl CANFD {
 
         self.write_iflag_bit(mb_index);
 
-        return Some(frame);
+        Some(frame)
     }
 
-    pub(crate) fn configure_region_mailboxes(
-        &mut self,
-        region_index: u32,
-        region_config: RegionConfig,
-    ) {
-        let mb_offset = if region_index == 2 {
-            self.get_region_1_message_buffers()
-        } else {
-            0
-        };
+    pub(crate) fn configure_regions(&mut self) {
+        self.exec_freeze_mut(|canfd| {
+            let region_2_mb_offset = canfd.get_region_1_message_buffers();
 
-        self.enter_freeze();
+            canfd.configure_region(canfd.config.region_1_config, 0);
+            canfd.configure_region(canfd.config.region_2_config, region_2_mb_offset);
+        });
+    }
 
+    fn configure_region(&mut self, region_config: RegionConfig, mb_offset: u32) {
         match region_config {
             RegionConfig::MB8 { mailbox_configs } => {
                 for (mb_index, config) in mailbox_configs.iter().enumerate() {
@@ -192,8 +190,6 @@ impl CANFD {
                 }
             }
         }
-
-        self.exit_freeze();
     }
 
     fn configure_mailbox(&mut self, mb_index: u32, config: &MailboxConfig) {
@@ -203,15 +199,19 @@ impl CANFD {
             MailboxConfig::Unconfigured => (),
         }
 
-        self.mailbox_configs[mb_index as usize] = config.clone();
+        self.mailbox_configs[mb_index as usize] = *config;
     }
 
     fn configure_tx_mailbox(&mut self, mb_index: u32) {
         let mb_data_offset = self.get_mailbox_data_offset(mb_index);
 
-        log::info!("TX | Index: {}, Offset: {}, Size: {}, Max bound: {}", mb_index, mb_data_offset,
-        
-        self.get_mailbox_size(mb_index), mb_data_offset + self.get_mailbox_size(mb_index));
+        log::info!(
+            "TX | Index: {}, Offset: {}, Size: {}, Max bound: {}",
+            mb_index,
+            mb_data_offset,
+            self.get_mailbox_size(mb_index),
+            mb_data_offset + self.get_mailbox_size(mb_index)
+        );
 
         self.write_iflag_bit(mb_index);
         self.set_imask_bit(mb_index, false);
@@ -230,8 +230,13 @@ impl CANFD {
     fn configure_rx_mailbox(&mut self, mb_index: u32, config: &RxMailboxConfig) {
         let mb_data_offset = self.get_mailbox_data_offset(mb_index);
 
-        log::info!("RX | Index: {}, Offset: {}, Size: {}, Max bound: {}", mb_index, mb_data_offset,
-        self.get_mailbox_size(mb_index), mb_data_offset + self.get_mailbox_size(mb_index));
+        log::info!(
+            "RX | Index: {}, Offset: {}, Size: {}, Max bound: {}",
+            mb_index,
+            mb_data_offset,
+            self.get_mailbox_size(mb_index),
+            mb_data_offset + self.get_mailbox_size(mb_index)
+        );
 
         self.write_iflag_bit(mb_index);
         self.set_imask_bit(mb_index, true);
@@ -239,26 +244,29 @@ impl CANFD {
         // "Inactive" and clean the message buffer
         let mut cs_reg = CSRegisterBitfield::new();
         cs_reg.write_field(CSField::CODE, CS_CODE_RX_INACTIVE);
-        
+
         write_cs_reg(mb_data_offset, cs_reg);
 
         clear_message_buffer_data(mb_data_offset, self.get_mailbox_size(mb_index));
-        
+
         // Configure the message buffer
         let mut id_reg = IDRegisterBitfield::new();
-        id_reg.write_field(
-            if config.extended_id {
-                IDField::ID_EXT
-            } else {
-                IDField::ID_STD
-            },
-            config.id,
-        );
+
+        match config.id {
+            Id::Standard(id) => id_reg.write_field(IDField::ID_STD, id),
+            Id::Extended(id) => id_reg.write_field(IDField::ID_EXT, id),
+        }
+
         write_id_reg(mb_data_offset, id_reg);
 
         let mut cs_reg = CSRegisterBitfield::new();
         cs_reg.write_field(CSField::CODE, CS_CODE_RX_EMPTY);
-        cs_reg.write_field(CSField::IDE, if config.extended_id { 0b1 } else { 0b0 });
+
+        match config.id {
+            Id::Standard(_) => cs_reg.write_field(CSField::IDE, 0b0),
+            Id::Extended(_) => cs_reg.write_field(CSField::IDE, 0b1),
+        }
+
         write_cs_reg(mb_data_offset, cs_reg);
 
         self.get_rximr_n(mb_index).write(config.id_mask);

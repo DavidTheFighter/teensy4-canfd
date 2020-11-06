@@ -1,7 +1,9 @@
-//! Does all initialization oriented things
+//! Holds code related to the initialization of the whole CAN FD module,
+//! including setting up timings
+//!
+//! Author: David Allen (hbddallen@gmail.com)
 
 use super::can_error::CANFDError;
-use super::config;
 use super::CANFD;
 use imxrt_ral as ral;
 
@@ -41,7 +43,7 @@ impl CANFD {
             return Err(err);
         }
 
-        return Ok(());
+        Ok(())
     }
 
     fn init_classical(&mut self) -> Result<(), CANFDError> {
@@ -72,26 +74,22 @@ impl CANFD {
         let seg2 = (timing.phase_seg_2.max(1).min(31) - 1) as u32;
         let rjw = (timing.jump_width.max(1).min(31) - 1) as u32;
 
-        self.enter_freeze();
-
         // Write timing config to register
-        ral::modify_reg!(
-            ral::can3,
-            self.instance,
-            CBT,
-            EPRESDIV: div,
-            EPROPSEG: prop_seg,
-            EPSEG1: seg1,
-            EPSEG2: seg2,
-            ERJW: rjw,
-            BTF: 0b1
-        );
+        self.exec_freeze(|| {
+            ral::modify_reg!(
+                ral::can3,
+                self.instance,
+                CBT,
+                EPRESDIV: div,
+                EPROPSEG: prop_seg,
+                EPSEG1: seg1,
+                EPSEG2: seg2,
+                ERJW: rjw,
+                BTF: 0b1
+            );
+        });
 
-        //ral::write_reg!(ral::can3, &self.instance, CBT, 0x800624A6); // For the C++ FlexCAN library
-
-        self.exit_freeze();
-
-        return Ok(());
+        Ok(())
     }
 
     fn init_fd(&mut self) -> Result<(), CANFDError> {
@@ -105,45 +103,48 @@ impl CANFD {
         let fseg2 = (timing.phase_seg_2.max(1).min(31) - 1) as u32;
         let frjw = (timing.jump_width.max(1).min(31) - 1) as u32;
 
-        let tdcen: u32 = if let None = self.config.transceiver_compensation { 0b0 } else { 0b1 };
-        let tdcoff: u32 = if let Some(tdcoff) = self.config.transceiver_compensation { tdcoff.max(1).min(31) as u32 } else { 1 };
+        let tdcen: u32 = if self.config.transceiver_compensation.is_none() { 0b0 } else { 0b1 };
 
-        self.enter_freeze();
+        let tdcoff: u32 = if let Some(tdcoff) = self.config.transceiver_compensation {
+            tdcoff.max(1).min(31) as u32
+        } else {
+            1
+        };
 
         // Write timing config to register
+        self.exec_freeze(|| {
+            ral::modify_reg!(
+                ral::can3,
+                self.instance,
+                FDCBT,
+                FPRESDIV: fdiv,
+                FPROPSEG: fprop_seg,
+                FPSEG1: fseg1,
+                FPSEG2: fseg2,
+                FRJW: frjw
+            );
 
-        ral::modify_reg!(
-            ral::can3,
-            self.instance,
-            FDCBT,
-            FPRESDIV: fdiv,
-            FPROPSEG: fprop_seg,
-            FPSEG1: fseg1,
-            FPSEG2: fseg2,
-            FRJW: frjw
-        );
+            // For the C++ FlexCAN library
+            //ral::write_reg!(ral::can3, &self.instance, FDCBT, 0x31423); 
 
-        //ral::write_reg!(ral::can3, &self.instance, FDCBT, 0x31423); // For the C++ FlexCAN library
+            // Enable: CAN FD
+            ral::modify_reg!(ral::can3, self.instance, MCR, FDEN: 0b1);
 
-        // Enable: CAN FD
-        ral::modify_reg!(ral::can3, self.instance, MCR, FDEN: 0b1);
-
-        // Enable:      Bit rate switch enable (FDRATE), enables faster bitrates in FD
-        // Set:         Transceiver delay compensation (TDCOFF), shouldn't matter if disabled
-        // Set:         Transceiver delay compensation enable (TDCEN)
-        // Set:         Message buffer data size region 1 (MBDSR0), size of MBs in RAM region 1
-        // Set:         Message buffer data size region 2 (MBDSR1), size of MBs in RAM region 2
-        ral::modify_reg!(ral::can3, self.instance, FDCTRL, FDRATE: 0b1, TDCOFF: tdcoff, TDCEN: tdcen,
-            MBDSR0: self.config.region_1_config.to_mbdsr_n(),
-            MBDSR1: self.config.region_2_config.to_mbdsr_n());
-
-        self.exit_freeze();
+            // Enable:      Bit rate switch enable (FDRATE), enables faster bitrates in FD
+            // Set:         Transceiver delay compensation (TDCOFF), shouldn't matter if disabled
+            // Set:         Transceiver delay compensation enable (TDCEN)
+            // Set:         Message buffer data size region 1 (MBDSR0), size of MBs in RAM region 1
+            // Set:         Message buffer data size region 2 (MBDSR1), size of MBs in RAM region 2
+            ral::modify_reg!(ral::can3, self.instance, FDCTRL, FDRATE: 0b1, TDCOFF: tdcoff, TDCEN: tdcen,
+                MBDSR0: self.config.region_1_config.to_mbdsr_n(),
+                MBDSR1: self.config.region_2_config.to_mbdsr_n());
+        });
 
         // Check to see if we failed TDC
         if ral::read_reg!(ral::can3, self.instance, FDCTRL, TDCFAIL) == 0b1 {
             return Err(CANFDError::TransceiverDelayCompensationFail);
         }
 
-        return Ok(());
+        Ok(())
     }
 }

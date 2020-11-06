@@ -1,4 +1,8 @@
-//! Message buffers
+//! Message buffer related things, mostly involves the CS and ID registers
+//! Also yes, the reads and writes for the various registers are poorly written, I'll make them
+//! better later :)
+//!
+//! Author: David Allen (hbddallen@gmail.com)
 
 use core::ptr;
 

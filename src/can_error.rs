@@ -1,4 +1,6 @@
 //! Errors relating to CAN FD
+//!
+//! Author: David Allen (hbddallen@gmail.com)
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CANFDError {

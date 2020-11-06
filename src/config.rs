@@ -1,7 +1,6 @@
-//! All config related things
-
-pub const MAX_BAUDRATE_CLASSICAL: u32 = 1_000_000; // The maximum baudrate for classical CAN
-pub const MAX_BAUDRATE_FD: u32 = 8_000_000; // The maximum baudrate for CANFD frames
+//! All configuration related structures and enums
+//!
+//! Author: David Allen (hbddallen@gmail.com)
 
 pub enum Clock {
     Clock8Mhz,
@@ -71,7 +70,8 @@ pub struct Config {
     pub region_2_config: RegionConfig,
     pub transceiver_compensation: Option<u8>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+
+#[derive(Debug, Clone, Copy)]
 pub enum RegionConfig {
     MB8 {
         mailbox_configs: [MailboxConfig; 32],
@@ -87,7 +87,7 @@ pub enum RegionConfig {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub enum MailboxConfig {
     Unconfigured,
     Rx { rx_config: RxMailboxConfig },
@@ -100,24 +100,23 @@ impl Default for MailboxConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Id {
     Standard(u32),
     Extended(u32),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct RxMailboxConfig {
-    pub id: u32,           // The ID to match incoming messages with
+    pub id: Id,       // The ID to match incoming messages with
     pub id_mask: u32, // A bitmask used to compared the incoming ID, 0 is don't care, 1 is match
-    pub extended_id: bool, // If the ID is 11 bits or 29 bits
 }
 
 impl RxMailboxConfig {
     pub fn default() -> Self {
         Self {
-            id: 0,
+            id: Id::Standard(0),
             id_mask: 0x3FFF_FFFF,
-            extended_id: false,
         }
     }
 }

@@ -4,8 +4,6 @@ use super::CANFD;
 use imxrt_ral as ral;
 
 impl CANFD {
-    
-
     pub fn enable(&mut self, state: bool) {
         ral::modify_reg!(ral::can3, self.instance, MCR, MDIS: if state { 0b0 } else { 0b1 });
 
@@ -14,12 +12,28 @@ impl CANFD {
         {}
     }
 
-    pub fn enter_freeze(&mut self) {
+    pub fn exec_freeze<F>(&self, f: F)
+    where
+        F: FnOnce(),
+    {
         ral::modify_reg!(ral::can3, self.instance, MCR, FRZ: 0b1, HALT: 0b1);
         while (ral::read_reg!(ral::can3, self.instance, MCR, FRZACK) != 0b1) {}
+
+        f();
+
+        ral::modify_reg!(ral::can3, self.instance, MCR, HALT: 0b0);
+        while (ral::read_reg!(ral::can3, self.instance, MCR, FRZACK) != 0b0) {}
     }
 
-    pub fn exit_freeze(&mut self) {
+    pub fn exec_freeze_mut<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut CANFD),
+    {
+        ral::modify_reg!(ral::can3, self.instance, MCR, FRZ: 0b1, HALT: 0b1);
+        while (ral::read_reg!(ral::can3, self.instance, MCR, FRZACK) != 0b1) {}
+
+        f(self);
+
         ral::modify_reg!(ral::can3, self.instance, MCR, HALT: 0b0);
         while (ral::read_reg!(ral::can3, self.instance, MCR, FRZACK) != 0b0) {}
     }
