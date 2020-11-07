@@ -56,7 +56,7 @@ impl CAN3FD {
     pub fn transfer_blocking(
         &mut self,
         _cs: &CriticalSection,
-        frame: TxFDFrame,
+        frame: &TxFDFrame,
     ) -> Result<(), RxTxError> {
         let mut result: Result<(), RxTxError> = Err(RxTxError::Unknown);
 
@@ -72,7 +72,7 @@ impl CAN3FD {
     pub fn transfer_nb(
         &mut self,
         _cs: &CriticalSection,
-        frame: TxFDFrame,
+        frame: &TxFDFrame,
     ) -> Result<(), RxTxError> {
         let mut result: Result<(), RxTxError> = Err(RxTxError::Unknown);
 

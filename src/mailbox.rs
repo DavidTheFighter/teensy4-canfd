@@ -26,13 +26,13 @@ pub struct RxFDFrame {
 }
 
 impl CANFD {
-    pub fn transfer_blocking(&mut self, frame: TxFDFrame) -> Result<(), RxTxError> {
+    pub fn transfer_blocking(&mut self, frame: &TxFDFrame) -> Result<(), RxTxError> {
         // TODO Better logic for selecting mailbox (smallest size, etc)
 
         loop {
             for (index, mailbox) in self.mailbox_configs.iter().enumerate() {
                 if let MailboxConfig::Tx = mailbox {
-                    if let Ok(()) = self.transfer(index as u32, &frame) {
+                    if let Ok(()) = self.transfer(index as u32, frame) {
                         // Wait for IFLAG to set to indicate a transmission
                         while self.read_iflag_bit(index as u32) {}
 
@@ -46,10 +46,10 @@ impl CANFD {
         }
     }
 
-    pub fn transfer_nb(&mut self, frame: TxFDFrame) -> Result<(), RxTxError> {
+    pub fn transfer_nb(&mut self, frame: &TxFDFrame) -> Result<(), RxTxError> {
         for (index, mailbox) in self.mailbox_configs.iter().enumerate() {
             if let MailboxConfig::Tx = mailbox {
-                if let Ok(()) = self.transfer(index as u32, &frame) {
+                if let Ok(()) = self.transfer(index as u32, frame) {
                     // Wait for IFLAG to set to indicate a transmission
                     while self.read_iflag_bit(index as u32) {}
 
