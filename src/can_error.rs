@@ -14,5 +14,6 @@ pub enum CANFDError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RxTxError {
     MailboxUnavailable, // Could not use this mailbox, it was unavailable for the operation
+    FrameTooBigForRegions, // Both regions are smaller than this frame size
     Unknown,            // Placeholder, *shouldn't* ever get this
 }

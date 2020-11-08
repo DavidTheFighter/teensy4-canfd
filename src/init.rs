@@ -103,7 +103,11 @@ impl CANFD {
         let fseg2 = (timing.phase_seg_2.max(1).min(31) - 1) as u32;
         let frjw = (timing.jump_width.max(1).min(31) - 1) as u32;
 
-        let tdcen: u32 = if self.config.transceiver_compensation.is_none() { 0b0 } else { 0b1 };
+        let tdcen: u32 = if self.config.transceiver_compensation.is_none() {
+            0b0
+        } else {
+            0b1
+        };
 
         let tdcoff: u32 = if let Some(tdcoff) = self.config.transceiver_compensation {
             tdcoff.max(1).min(31) as u32

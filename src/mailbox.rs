@@ -27,27 +27,59 @@ pub struct RxFDFrame {
 
 impl CANFD {
     pub fn transfer_blocking(&mut self, frame: &TxFDFrame) -> Result<(), RxTxError> {
-        // TODO Better logic for selecting mailbox (smallest size, etc)
-
         loop {
-            for (index, mailbox) in self.mailbox_configs.iter().enumerate() {
-                if let MailboxConfig::Tx = mailbox {
-                    if let Ok(()) = self.transfer(index as u32, frame) {
-                        // Wait for IFLAG to set to indicate a transmission
-                        while self.read_iflag_bit(index as u32) {}
-
-                        // Reset the IFLAG bit to indicate we read the message
-                        self.write_iflag_bit(index as u32);
-
-                        return Ok(());
-                    }
-                }
+            match self.transfer_nb(frame) {
+                Ok(()) => return Ok(()),
+                Err(err) => match err {
+                    RxTxError::MailboxUnavailable => continue,
+                    _ => return Err(err),
+                },
             }
         }
     }
 
     pub fn transfer_nb(&mut self, frame: &TxFDFrame) -> Result<(), RxTxError> {
-        for (index, mailbox) in self.mailbox_configs.iter().enumerate() {
+        // TODO Better logic for selecting mailbox (smallest size, etc)
+
+        if frame.buffer_len > self.config.region_1_config.size_bytes()
+            && frame.buffer_len > self.config.region_2_config.size_bytes()
+        {
+            return Err(RxTxError::FrameTooBigForRegions);
+        }
+
+        let region_1_offset = self.get_region_1_message_buffers() as usize;
+        let mut region_1_iter = self.mailbox_configs.iter().take(region_1_offset);
+        let mut region_2_iter = self.mailbox_configs.iter().skip(region_1_offset);
+
+        let mut iter1: Option<&mut dyn Iterator<Item = &MailboxConfig>> = None;
+        let mut iter2: Option<&mut dyn Iterator<Item = &MailboxConfig>> = None;
+
+        let region_1_diff =
+            (self.config.region_1_config.size_bytes() as i32) - (frame.buffer_len.min(64) as i32);
+        let region_2_diff =
+            (self.config.region_2_config.size_bytes() as i32) - (frame.buffer_len.min(64) as i32);
+
+        if region_1_diff >= 0 && region_1_diff < region_2_diff {
+            // Region 1 is a better fit
+            iter1 = Some(&mut region_1_iter);
+
+            if region_2_diff >= 0 {
+                iter2 = Some(&mut region_2_iter);
+            }
+        } else if region_2_diff >= 0 && region_2_diff < region_1_diff {
+            // Region 2 is a better fit
+            iter1 = Some(&mut region_2_iter);
+
+            if region_1_diff >= 0 {
+                iter2 = Some(&mut region_1_iter);
+            }
+        } else {
+            // Both regions are the same size
+            iter1 = Some(&mut region_1_iter);
+            iter2 = Some(&mut region_2_iter);
+        }
+
+        let attempt_transfer = |index: usize, mailbox: &MailboxConfig| -> Result<(), RxTxError> {
             if let MailboxConfig::Tx = mailbox {
                 if let Ok(()) = self.transfer(index as u32, frame) {
                     // Wait for IFLAG to set to indicate a transmission
@@ -56,6 +88,41 @@ impl CANFD {
                     // Reset the IFLAG bit to indicate we read the message
                     self.write_iflag_bit(index as u32);
 
+                    if cfg!(feature = "debuginfo") {
+                        let region_index = (index as u32) / self.get_region_1_message_buffers() + 1;
+                        let region_size = if index == 1 {
+                            self.config.region_1_config.size_bytes()
+                        } else {
+                            self.config.region_2_config.size_bytes()
+                        };
+
+                        log::info!(
+                            "Sent {}-byte message on MB #{} (Region #{} @ {}-bytes)",
+                            frame.buffer_len,
+                            index,
+                            region_index,
+                            region_size
+                        );
+                    }
+
+                    return Ok(());
+                }
+            }
+
+            Err(RxTxError::MailboxUnavailable)
+        };
+
+        if let Some(iter1) = iter1 {
+            for (index, mailbox) in iter1.enumerate() {
+                if attempt_transfer(index, mailbox).is_ok() {
+                    return Ok(());
+                }
+            }
+        }
+
+        if let Some(iter2) = iter2 {
+            for (index, mailbox) in iter2.enumerate() {
+                if attempt_transfer(index, mailbox).is_ok() {
                     return Ok(());
                 }
             }
@@ -155,6 +222,23 @@ impl CANFD {
 
         self.write_iflag_bit(mb_index);
 
+        if cfg!(feature = "debuginfo") {
+            let region_index = mb_index / self.get_region_1_message_buffers() + 1;
+            let region_size = if mb_index == 1 {
+                self.config.region_1_config.size_bytes()
+            } else {
+                self.config.region_2_config.size_bytes()
+            };
+
+            log::info!(
+                "Received {}-byte message on MB #{} (Region #{} @ {}-bytes)",
+                frame.buffer_len,
+                mb_index,
+                region_index,
+                region_size
+            );
+        }
+        
         Some(frame)
     }
 

@@ -8,6 +8,9 @@ repository = "https://github.com/DavidTheFighter/t4-flexcan3"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+debuginfo = []
+
 [dependencies]
 panic-halt = "0.2.0"
 cortex-m = "0.6.2"
