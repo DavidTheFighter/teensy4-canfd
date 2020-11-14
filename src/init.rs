@@ -62,7 +62,7 @@ impl CANFD {
         // Enable:      Transmission abort (AEN)
         ral::modify_reg!(ral::can3, self.instance, MCR,
             MAXMB: (self.get_max_message_buffers() - 1) & 0x7F, SLFWAK: 0b0, WAKSRC: 0b0,
-            IRMQ: 0b1, SRXDIS: 0b1, DOZE: 0b0, AEN: 0b1);
+            IRMQ: 0b1, SRXDIS: 0b1, DOZE: 0b0, AEN: 0b1, RFEN: 0b0);
 
         // --- Set timing config for classical CAN --- //
 

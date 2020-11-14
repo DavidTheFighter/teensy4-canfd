@@ -7,10 +7,15 @@
 pub mod can_error;
 pub mod config;
 mod init;
-pub(crate) mod interrupt;
-pub mod mailbox;
+mod interrupt;
+mod mailbox;
 pub(crate) mod message_buffer;
 pub(crate) mod util;
+pub(crate) mod transfer;
+pub(crate) mod receive;
+
+pub use transfer::TxFDFrame;
+pub use receive::RxFDFrame;
 
 use can_error::RxTxError;
 use core::cell::UnsafeCell;
@@ -18,7 +23,6 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use cortex_m::interrupt as cortex_m_interrupt;
 use cortex_m::interrupt::CriticalSection;
 use imxrt_ral as ral;
-use mailbox::{RxFDFrame, TxFDFrame};
 use teensy4_bsp::interrupt::CAN3;
 
 struct CANFDCS(UnsafeCell<Option<CANFD>>);
@@ -85,10 +89,10 @@ impl CAN3FD {
         result
     }
 
-    pub fn set_rx_callback(&mut self, _cs: &CriticalSection, f: fn(&CriticalSection, RxFDFrame)) {
+    pub fn set_rx_callback(&mut self, _cs: &CriticalSection, callback: Option<fn(&CriticalSection, RxFDFrame)>) {
         unsafe {
             if let Some(canfd) = &mut (*CANFD_INSTANCE.0.get()) {
-                canfd.rx_callback = Some(f);
+                canfd.rx_callback = callback;
             }
         }
     }

@@ -66,7 +66,7 @@ pub fn clear_message_buffer_data(mb_data_offset: u32, mb_data_size: u32) {
     }
 }
 
-pub fn write_message_buffer(mb_data_offset: u32, buffer: [u32; 16], buffer_len: u32) {
+pub fn write_message_buffer(mb_data_offset: u32, buffer: &[u8], buffer_len: u32) {
     unsafe {
         let addr = MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 8;
 
@@ -74,25 +74,22 @@ pub fn write_message_buffer(mb_data_offset: u32, buffer: [u32; 16], buffer_len: 
 
         for (offset, buffer_elem) in buffer
             .iter()
-            .take(((buffer_len >> 2) as usize).min(16))
+            .take(((buffer_len >> 2) as usize).min(64))
             .enumerate()
         {
             // (x >> 2) is fancy for (x / 4)
-            ptr::write_volatile((addr + (offset as u32) * 4) as *mut u32, *buffer_elem);
+            ptr::write_volatile((addr + (offset as u32) * 4) as *mut u8, *buffer_elem);
         }
     }
 }
 
-pub fn read_message_buffer(mb_data_offset: u32, read_len: u32) -> [u32; 16] {
+pub fn read_message_buffer(mb_data_offset: u32, read_len: u32) -> [u8; 64] {
     unsafe {
-        let mut buf = [0u32; 16];
+        let mut buf = [0_u8; 64];
         let base_addr = MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 8;
 
-        // TODO ptr::copy_nonoverlapping?
-
-        for i in 0..(read_len >> 2).min(16) {
-            // (x >> 2) is fancy for (x / 4)
-            buf[i as usize] = ptr::read_volatile((base_addr + i * 4) as *mut u32);
+        for i in 0..read_len.min(64) {
+            buf[i as usize] = ptr::read_volatile((base_addr + i * 4) as *mut u8);
         }
 
         buf
@@ -157,6 +154,10 @@ impl CSRegisterBitfield {
     pub fn read_field(&self, field: CSField) -> u32 {
         (self.val & field.mask()) >> field.shift()
     }
+
+    pub fn serialize(&self) -> u32 {
+        self.val
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -200,5 +201,9 @@ impl IDRegisterBitfield {
 
     pub fn read_field(&self, field: IDField) -> u32 {
         (self.val & field.mask()) >> field.shift()
+    }
+
+    pub fn serialize(&self) -> u32 {
+        self.val        
     }
 }
