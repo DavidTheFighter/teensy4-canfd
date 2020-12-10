@@ -72,13 +72,9 @@ pub fn write_message_buffer(mb_data_offset: u32, buffer: &[u8], buffer_len: u32)
 
         // TODO ptr::copy_nonoverlapping?
 
-        for (offset, buffer_elem) in buffer
-            .iter()
-            .take(((buffer_len >> 2) as usize).min(64))
-            .enumerate()
-        {
+        for (offset, buffer_elem) in buffer.iter().take(buffer_len.min(64) as usize).enumerate() {
             // (x >> 2) is fancy for (x / 4)
-            ptr::write_volatile((addr + (offset as u32) * 4) as *mut u8, *buffer_elem);
+            ptr::write_volatile((addr + offset as u32) as *mut u8, *buffer_elem);
         }
     }
 }
@@ -204,6 +200,6 @@ impl IDRegisterBitfield {
     }
 
     pub fn serialize(&self) -> u32 {
-        self.val        
+        self.val
     }
 }

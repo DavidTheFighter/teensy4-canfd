@@ -10,12 +10,12 @@ mod init;
 mod interrupt;
 mod mailbox;
 pub(crate) mod message_buffer;
-pub(crate) mod util;
-pub(crate) mod transfer;
 pub(crate) mod receive;
+pub(crate) mod transfer;
+pub(crate) mod util;
 
-pub use transfer::TxFDFrame;
 pub use receive::RxFDFrame;
+pub use transfer::TxFDFrame;
 
 use can_error::RxTxError;
 use core::cell::UnsafeCell;
@@ -89,7 +89,11 @@ impl CAN3FD {
         result
     }
 
-    pub fn set_rx_callback(&mut self, _cs: &CriticalSection, callback: Option<fn(&CriticalSection, RxFDFrame)>) {
+    pub fn set_rx_callback(
+        &mut self,
+        _cs: &CriticalSection,
+        callback: Option<fn(&CriticalSection, RxFDFrame)>,
+    ) {
         unsafe {
             if let Some(canfd) = &mut (*CANFD_INSTANCE.0.get()) {
                 canfd.rx_callback = callback;

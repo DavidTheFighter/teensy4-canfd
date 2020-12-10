@@ -124,11 +124,13 @@ impl CANFD {
 
         write_cs_reg(mb_data_offset, cs_reg);
 
-        self.exec_freeze_mut(|canfd| {
-            match config.id {
-                Id::Standard(_) => canfd.get_rximr_n(mb_index).write((config.id_mask & 0x7FF) << 18),
-                Id::Extended(_) => canfd.get_rximr_n(mb_index).write(config.id_mask & 0x1FFF_FFFF),
-            }
+        self.exec_freeze_mut(|canfd| match config.id {
+            Id::Standard(_) => canfd
+                .get_rximr_n(mb_index)
+                .write((config.id_mask & 0x7FF) << 18),
+            Id::Extended(_) => canfd
+                .get_rximr_n(mb_index)
+                .write(config.id_mask & 0x1FFF_FFFF),
         });
     }
 

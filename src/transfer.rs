@@ -39,8 +39,16 @@ impl CANFD {
         }
 
         let region_1_offset = self.get_region_1_message_buffers() as usize;
-        let mut region_1_iter = self.mailbox_configs.iter().enumerate().take(region_1_offset);
-        let mut region_2_iter = self.mailbox_configs.iter().enumerate().skip(region_1_offset);
+        let mut region_1_iter = self
+            .mailbox_configs
+            .iter()
+            .enumerate()
+            .take(region_1_offset);
+        let mut region_2_iter = self
+            .mailbox_configs
+            .iter()
+            .enumerate()
+            .skip(region_1_offset);
 
         let iter1: Option<&mut dyn Iterator<Item = (usize, &MailboxConfig)>>;
         let mut iter2: Option<&mut dyn Iterator<Item = (usize, &MailboxConfig)>> = None;
@@ -50,23 +58,28 @@ impl CANFD {
         let region_2_diff =
             (self.config.region_2_config.size_bytes() as i32) - (buffer_len.min(64) as i32);
 
-        if region_1_diff >= 0 && region_2_diff < 0 {        // Region 1 fits & region 2 doesn't
+        if region_1_diff >= 0 && region_2_diff < 0 {
+            // Region 1 fits & region 2 doesn't
             iter1 = Some(&mut region_1_iter);
-        } else if region_2_diff >= 0 && region_1_diff < 0 { // Region 2 fits & region 1 doesn't
+        } else if region_2_diff >= 0 && region_1_diff < 0 {
+            // Region 2 fits & region 1 doesn't
             iter1 = Some(&mut region_2_iter);
-        } else if region_1_diff < region_2_diff {           // Region 1 is a better fit
+        } else if region_1_diff < region_2_diff {
+            // Region 1 is a better fit
             iter1 = Some(&mut region_1_iter);
 
             if region_2_diff >= 0 {
                 iter2 = Some(&mut region_2_iter);
             }
-        } else if region_2_diff < region_1_diff {           // Region 2 is a better fit
+        } else if region_2_diff < region_1_diff {
+            // Region 2 is a better fit
             iter1 = Some(&mut region_2_iter);
 
             if region_1_diff >= 0 {
                 iter2 = Some(&mut region_1_iter);
             }
-        } else {                                            // Both regions are the same size
+        } else {
+            // Both regions are the same size
             iter1 = Some(&mut region_1_iter);
             iter2 = Some(&mut region_2_iter);
         }
@@ -81,7 +94,8 @@ impl CANFD {
                     self.write_iflag_bit(index as u32);
 
                     if cfg!(feature = "debuginfo") {
-                        let region_index = (index as u32) / (self.get_region_1_message_buffers() - 1) + 1;
+                        let region_index =
+                            (index as u32) / (self.get_region_1_message_buffers() - 1) + 1;
                         let region_size = if region_index == 1 {
                             self.config.region_1_config.size_bytes()
                         } else {

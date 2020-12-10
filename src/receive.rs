@@ -70,7 +70,7 @@ impl CANFD {
                 id_reg.serialize(),
             );
         }
-        
+
         Some(frame)
     }
 }
