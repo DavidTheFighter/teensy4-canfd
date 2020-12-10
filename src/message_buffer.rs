@@ -68,13 +68,12 @@ pub fn clear_message_buffer_data(mb_data_offset: u32, mb_data_size: u32) {
 
 pub fn write_message_buffer(mb_data_offset: u32, buffer: &[u8], buffer_len: u32) {
     unsafe {
-        let addr = MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 8;
+        let addr = (MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 8) as usize;
 
-        // TODO ptr::copy_nonoverlapping?
-
-        for (offset, buffer_elem) in buffer.iter().take(buffer_len.min(64) as usize).enumerate() {
-            // (x >> 2) is fancy for (x / 4)
-            ptr::write_volatile((addr + offset as u32) as *mut u8, *buffer_elem);
+        for (word_index, word) in buffer.chunks(4).enumerate().take(buffer_len.min(16) as usize) {
+            for (byte_index, byte) in word.iter().rev().enumerate() {
+                ptr::write_volatile((addr + word_index * 4 + byte_index) as *mut u8, *byte);
+            }
         }
     }
 }
