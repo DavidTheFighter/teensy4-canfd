@@ -14,18 +14,19 @@ debuginfo = []
 [dependencies]
 panic-halt = "0.2.0"
 cortex-m = "0.6.2"
-cortex-m-rt = "0.6.13"
 embedded-hal = "0.2.3"
 log = "0.4.11"
+
+[dependencies.cortex-m-rt]
+version = "0.6.13"
+features = ["device"]  # For cortex_m_rt::interrupt support
 
 [dependencies.imxrt-ral]
 version = "0.4.0"
 features = ["imxrt1062", "rt"] # "rt" flag optional
 
 [dependencies.teensy4-bsp]
-git = "https://github.com/mciantyre/teensy4-rs.git"
-branch = "master"
-features = ["usb-logging", "rt"]
+version = "0.1.0"
 
 # Don't optimize build dependencies, like proc macros.
 # Helps with build times.
