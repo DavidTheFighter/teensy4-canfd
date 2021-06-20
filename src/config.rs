@@ -2,6 +2,7 @@
 //!
 //! Author: David Allen (hbddallen@gmail.com)
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Clock {
     Clock8Mhz,
     Clock16Mhz,
@@ -54,6 +55,7 @@ impl Clock {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TimingConfig {
     pub prescalar_division: u32,
     pub prop_seg: u8,
@@ -62,6 +64,7 @@ pub struct TimingConfig {
     pub jump_width: u8,
 }
 
+#[derive(Debug, Clone)]
 pub struct Config {
     pub clock_speed: Clock,
     pub timing_classical: TimingConfig,

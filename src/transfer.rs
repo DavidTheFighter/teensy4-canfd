@@ -5,6 +5,7 @@ use crate::config::{Id, MailboxConfig};
 use crate::message_buffer::*;
 use crate::CANFD;
 
+#[derive(Debug, Clone)]
 pub struct TxFDFrame<'a> {
     pub id: Id,
     pub buffer: &'a [u8],

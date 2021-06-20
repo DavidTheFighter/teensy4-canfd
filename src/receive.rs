@@ -5,6 +5,7 @@ use crate::config::Id;
 use crate::message_buffer::*;
 use crate::CANFD;
 
+#[derive(Debug, Clone)]
 pub struct RxFDFrame {
     pub id: Id,
     pub buffer_len: u32,
