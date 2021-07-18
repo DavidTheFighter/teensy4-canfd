@@ -28,10 +28,7 @@ impl CANFD {
     pub fn transfer_nb(&mut self, frame: &TxFDFrame) -> Result<(), RxTxError> {
         // TODO Better logic for selecting mailbox (smallest size, etc)
 
-        let mut buffer_len: u32 = 0;
-        for _ in frame.buffer.iter().take(64) {
-            buffer_len += 1;
-        }
+        let buffer_len: u32 = frame.buffer.len() as u32;
 
         if buffer_len > self.config.region_1_config.size_bytes()
             && buffer_len > self.config.region_2_config.size_bytes()
