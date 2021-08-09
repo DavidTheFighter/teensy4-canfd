@@ -66,11 +66,11 @@ pub fn clear_message_buffer_data(mb_data_offset: u32, mb_data_size: u32) {
     }
 }
 
-pub fn write_message_buffer(mb_data_offset: u32, buffer: &[u8], buffer_len: u32) {
+pub fn write_message_buffer(mb_data_offset: u32, buffer: &[u8]) {
     unsafe {
         let addr = (MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 8) as usize;
 
-        for (word_index, word) in buffer.chunks(4).enumerate().take((buffer_len as usize).min(64) >> 2) {
+        for (word_index, word) in buffer.chunks(4).enumerate() {
             for (byte, byte_index) in word.iter().zip((0..4_usize).rev()) {
                 ptr::write_volatile((addr + word_index * 4 + byte_index) as *mut u8, *byte);
             }
@@ -82,10 +82,16 @@ pub fn read_message_buffer(mb_data_offset: u32, read_len: u32) -> [u8; 64] {
     unsafe {
         let mut buf = [0_u8; 64];
         let addr = (MESSAGE_BUFFER_BASE_ADDR + mb_data_offset + 8) as usize;
+        let mut bytes_read = 0;
 
-        for (word_index, word) in buf.chunks_mut(4).enumerate().take((read_len as usize).min(64) >> 2) {
+        for (word_index, word) in buf.chunks_mut(4).enumerate() {
             for (byte, byte_index) in word.iter_mut().zip((0..4_usize).rev()) {
                 *byte = ptr::read_volatile((addr + word_index * 4 + byte_index) as *const u8);
+                
+                bytes_read += 1;
+                if bytes_read >= read_len {
+                    break;
+                }
             }
         }
 

@@ -164,7 +164,7 @@ impl CANFD {
 
         write_id_reg(mb_data_offset, id_reg);
 
-        write_message_buffer(mb_data_offset, frame.buffer, buffer_len);
+        write_message_buffer(mb_data_offset, frame.buffer);
 
         // Configure CS register for transmitting
         let mut cs_reg = CSRegisterBitfield::new();
